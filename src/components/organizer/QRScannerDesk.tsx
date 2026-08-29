@@ -12,8 +12,7 @@ import {
   Upload,
   Sparkles,
   CameraOff,
-  ScanLine,
-  Play
+  ScanLine
 } from 'lucide-react';
 import type { Participant } from '../../types';
 
@@ -23,7 +22,6 @@ export const QRScannerDesk: React.FC = () => {
   const [manualCode, setManualCode] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
-  const [cameraUnavailable, setCameraUnavailable] = useState(false);
   const [simulatedAttendee, setSimulatedAttendee] = useState<Participant | null>(null);
   
   const [lastScannedResult, setLastScannedResult] = useState<{
@@ -37,9 +35,11 @@ export const QRScannerDesk: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const stopScanner = async () => {
-    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+    if (html5QrCodeRef.current) {
       try {
-        await html5QrCodeRef.current.stop();
+        if (html5QrCodeRef.current.isScanning) {
+          await html5QrCodeRef.current.stop();
+        }
       } catch (err) {
         // ignore
       }
@@ -49,34 +49,21 @@ export const QRScannerDesk: React.FC = () => {
   };
 
   const startScanner = async () => {
-    setCameraUnavailable(false);
     setIsSimulating(false);
+    setIsScanning(true);
 
     try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setCameraUnavailable(true);
-        startSimulation();
-        return;
-      }
-
-      // Check camera devices
-      const devices = await Html5Qrcode.getCameras().catch(() => []);
-      if (!devices || devices.length === 0) {
-        setCameraUnavailable(true);
-        startSimulation();
-        return;
-      }
-
-      setIsScanning(true);
       if (!html5QrCodeRef.current) {
         html5QrCodeRef.current = new Html5Qrcode('qr-reader-container');
       }
 
+      // Directly start with facingMode "user" (front webcam) or standard video device
       await html5QrCodeRef.current.start(
         { facingMode: 'user' },
         {
           fps: 10,
-          qrbox: { width: 220, height: 220 },
+          qrbox: { width: 240, height: 240 },
+          aspectRatio: 1.333333
         },
         async (decodedText) => {
           const result = await checkInParticipant(decodedText);
@@ -90,26 +77,18 @@ export const QRScannerDesk: React.FC = () => {
           }
         },
         () => {
-          // ignore frame errors
+          // ignore continuous scanning frame misses
         }
       );
+      addToast('Camera Online', 'Webcam is now scanning for attendee QR passes.', 'success');
     } catch (err: any) {
-      console.warn('Physical camera unavailable, auto-switching to high-tech scanner simulator', err);
-      setCameraUnavailable(true);
-      startSimulation();
+      console.warn('Direct camera start failed, enabling interactive scanner mode:', err);
+      setIsScanning(false);
+      setIsSimulating(true);
+      
+      const pendingAttendee = participants.find(p => !p.is_checked_in) || participants[0];
+      setSimulatedAttendee(pendingAttendee || null);
     }
-  };
-
-  // High-Tech Animated Camera Simulator (for devices without webcam hardware)
-  const startSimulation = () => {
-    setIsScanning(false);
-    setIsSimulating(true);
-    
-    // Pick an un-checked-in participant for demo
-    const pendingAttendee = participants.find(p => !p.is_checked_in) || participants[0];
-    setSimulatedAttendee(pendingAttendee || null);
-
-    addToast('Camera Feed Active', 'Live gate terminal scanner activated.', 'info');
   };
 
   const triggerSimulatedScan = async () => {
@@ -117,7 +96,6 @@ export const QRScannerDesk: React.FC = () => {
     const result = await checkInParticipant(simulatedAttendee.qr_ticket_id);
     setLastScannedResult({ ...result, timestamp: new Date() });
     
-    // Switch to next attendee for continuous testing
     setTimeout(() => {
       const nextPending = participants.find(p => !p.is_checked_in && p.id !== simulatedAttendee.id);
       if (nextPending) {
@@ -128,8 +106,14 @@ export const QRScannerDesk: React.FC = () => {
 
   useEffect(() => {
     return () => {
-      if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-        html5QrCodeRef.current.stop().catch(console.error);
+      if (html5QrCodeRef.current) {
+        try {
+          if (html5QrCodeRef.current.isScanning) {
+            html5QrCodeRef.current.stop().catch(console.error);
+          }
+        } catch {
+          // ignore
+        }
       }
     };
   }, []);
@@ -276,14 +260,17 @@ export const QRScannerDesk: React.FC = () => {
             {/* Scanner / Live View Area */}
             <div className="relative rounded-2xl overflow-hidden border-2 border-indigo-500/30 bg-slate-950 p-2 min-h-[260px] flex flex-col items-center justify-center">
               
-              {/* WebCam View Container */}
-              <div id="qr-reader-container" className={`w-full ${!isScanning ? 'hidden' : ''}`} />
+              {/* WebCam Video Element Container */}
+              <div 
+                id="qr-reader-container" 
+                className={`w-full max-w-md rounded-xl overflow-hidden ${!isScanning ? 'hidden' : ''}`} 
+              />
 
-              {/* Animated Interactive Scanner Feed (Activated when scanning or when simulating) */}
+              {/* Animated Interactive Scanner Feed (if camera is simulated) */}
               {isSimulating && (
                 <div className="w-full flex flex-col items-center justify-center p-6 space-y-4 relative overflow-hidden">
                   
-                  {/* Glowing Laser Scan Line Animation */}
+                  {/* Laser Line */}
                   <div className="relative w-48 h-48 rounded-2xl border-2 border-dashed border-cyan-400/60 bg-slate-900/80 flex flex-col items-center justify-center p-4 shadow-2xl shadow-cyan-500/20">
                     <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-lg shadow-cyan-400 animate-pulse top-1/2 -translate-y-1/2" />
                     <QrCode className="w-24 h-24 text-indigo-400 opacity-80" />
