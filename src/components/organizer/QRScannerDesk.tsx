@@ -53,26 +53,28 @@ export const QRScannerDesk: React.FC = () => {
     setIsScanning(true);
 
     try {
+      // Step 1: Explicitly request camera permission to populate WebRTC device list
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        stream.getTracks().forEach(track => track.stop());
+      }
+
+      // Step 2: Enumerate devices after permission grant
+      const devices = await Html5Qrcode.getCameras();
+      let cameraIdOrConfig: any = { facingMode: 'user' };
+
+      if (devices && devices.length > 0) {
+        // Pass the first device ID string
+        cameraIdOrConfig = devices[0].id;
+      }
+
       if (!html5QrCodeRef.current) {
         html5QrCodeRef.current = new Html5Qrcode('qr-reader-container');
       }
 
-      // Step 1: Enumerate video input devices on Windows / Mac / Linux
-      let cameraConfig: any = true;
-      try {
-        const devices = await Html5Qrcode.getCameras();
-        if (devices && devices.length > 0) {
-          // Use direct device ID of the first available webcam (avoids facingMode driver mismatch on Windows)
-          cameraConfig = devices[0].id;
-        }
-      } catch (e) {
-        // fallback to standard video config
-        cameraConfig = { video: true };
-      }
-
-      // Step 2: Start scanning with the detected camera ID
+      // Step 3: Start scanning
       await html5QrCodeRef.current.start(
-        cameraConfig,
+        cameraIdOrConfig,
         {
           fps: 10,
           qrbox: { width: 240, height: 240 },
@@ -90,10 +92,11 @@ export const QRScannerDesk: React.FC = () => {
           }
         },
         () => {
-          // ignore continuous scanning frame misses
+          // ignore frame scan misses
         }
       );
-      addToast('Camera Online', 'Webcam is now scanning for attendee QR passes.', 'success');
+
+      addToast('Camera Live', 'Webcam feed is now scanning.', 'success');
     } catch (err: any) {
       console.warn('Physical camera unavailable, enabling interactive scanner mode:', err);
       setIsScanning(false);
