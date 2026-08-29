@@ -53,28 +53,36 @@ export const QRScannerDesk: React.FC = () => {
     setIsScanning(true);
 
     try {
-      // Step 1: Explicitly request camera permission to populate WebRTC device list
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        stream.getTracks().forEach(track => track.stop());
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        addToast('Security Error', 'Camera requires localhost or HTTPS connection.', 'urgent');
+        throw new Error('Camera API not available in this browser context.');
       }
 
-      // Step 2: Enumerate devices after permission grant
-      const devices = await Html5Qrcode.getCameras();
-      let cameraIdOrConfig: any = { facingMode: 'user' };
-
-      if (devices && devices.length > 0) {
-        // Pass the first device ID string
-        cameraIdOrConfig = devices[0].id;
+      let deviceId = null;
+      try {
+        // Step 1: Explicitly request camera permission to populate WebRTC device list
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        stream.getTracks().forEach(track => track.stop());
+        
+        // Step 2: Enumerate devices after permission grant
+        const devices = await Html5Qrcode.getCameras();
+        if (devices && devices.length > 0) {
+          deviceId = devices[0].id;
+        }
+      } catch (err: any) {
+        addToast('Permission Denied', 'Please click the lock icon in your URL bar and allow Camera access.', 'urgent');
+        throw err;
       }
 
       if (!html5QrCodeRef.current) {
         html5QrCodeRef.current = new Html5Qrcode('qr-reader-container');
       }
 
+      const config = deviceId ? deviceId : { facingMode: 'user' };
+
       // Step 3: Start scanning
       await html5QrCodeRef.current.start(
-        cameraIdOrConfig,
+        config,
         {
           fps: 10,
           qrbox: { width: 240, height: 240 },
@@ -98,7 +106,10 @@ export const QRScannerDesk: React.FC = () => {
 
       addToast('Camera Live', 'Webcam feed is now scanning.', 'success');
     } catch (err: any) {
-      console.warn('Physical camera unavailable, enabling interactive scanner mode:', err);
+      console.warn('Physical camera unavailable:', err);
+      const errMsg = err?.message || err || 'Unknown camera error';
+      addToast('Scanner Error', `Fallback to simulator. Reason: ${errMsg}`, 'urgent');
+      
       setIsScanning(false);
       setIsSimulating(true);
       
