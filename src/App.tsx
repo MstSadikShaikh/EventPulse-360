@@ -4,6 +4,7 @@ import { Navbar } from './components/common/Navbar';
 import { ToastContainer } from './components/common/ToastContainer';
 import { CreateEventModal } from './components/common/CreateEventModal';
 import { AuthModal } from './components/common/AuthModal';
+import { AccessRestricted } from './components/common/AccessRestricted';
 import { ParticipantHub } from './components/participant/ParticipantHub';
 import { OrganizerDashboard } from './components/organizer/OrganizerDashboard';
 import { JudgePortal } from './components/judge/JudgePortal';
@@ -11,9 +12,25 @@ import { LiveLeaderboard } from './components/leaderboard/LiveLeaderboard';
 import { Zap } from 'lucide-react';
 
 const MainDashboard: React.FC = () => {
-  const { role, loading, announcements, event } = useEvent();
+  const { role, loading, announcements, event, currentUser } = useEvent();
   const [showCreateEventModal, setShowCreateEventModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authDefaultRole, setAuthDefaultRole] = useState<'participant' | 'organizer' | 'judge'>('organizer');
+
+  const openAuthWithRole = (targetRole: 'participant' | 'organizer' | 'judge' = 'organizer') => {
+    setAuthDefaultRole(targetRole);
+    setShowAuthModal(true);
+  };
+
+  const userRole = currentUser?.role || 'guest';
+  const isOrganizer = userRole === 'organizer';
+  const isJudge = userRole === 'judge';
+  const isParticipant = userRole === 'participant';
+
+  // Permission Checks
+  const canViewOrganizer = isOrganizer;
+  const canViewJudge = isOrganizer || isJudge;
+  const canViewParticipant = isOrganizer || isParticipant || userRole === 'guest';
 
   // Latest pinned urgent announcement
   const pinnedUrgent = announcements.find(a => a.is_pinned || a.category === 'urgent');
@@ -24,7 +41,7 @@ const MainDashboard: React.FC = () => {
       {/* Top Navigation */}
       <Navbar 
         onOpenCreateEvent={() => setShowCreateEventModal(true)} 
-        onOpenAuth={() => setShowAuthModal(true)} 
+        onOpenAuth={(r) => openAuthWithRole(r || 'organizer')} 
       />
 
       {/* Pinned Urgent Alert Ribbon */}
@@ -61,10 +78,46 @@ const MainDashboard: React.FC = () => {
           </div>
         ) : (
           <div className="animate-in fade-in duration-300">
-            {role === 'participant' && <ParticipantHub />}
-            {role === 'organizer' && <OrganizerDashboard />}
-            {role === 'judge' && <JudgePortal />}
+            
+            {/* Participant View */}
+            {role === 'participant' && (
+              canViewParticipant ? (
+                <ParticipantHub />
+              ) : (
+                <AccessRestricted 
+                  requiredRole="participant" 
+                  onAuthenticate={() => openAuthWithRole('participant')} 
+                />
+              )
+            )}
+
+            {/* Organizer View */}
+            {role === 'organizer' && (
+              canViewOrganizer ? (
+                <OrganizerDashboard />
+              ) : (
+                <AccessRestricted 
+                  requiredRole="organizer" 
+                  onAuthenticate={() => openAuthWithRole('organizer')} 
+                />
+              )
+            )}
+
+            {/* Judge View */}
+            {role === 'judge' && (
+              canViewJudge ? (
+                <JudgePortal />
+              ) : (
+                <AccessRestricted 
+                  requiredRole="judge" 
+                  onAuthenticate={() => openAuthWithRole('judge')} 
+                />
+              )
+            )}
+
+            {/* Live Arena Leaderboard (Always Public) */}
             {role === 'leaderboard' && <LiveLeaderboard />}
+
           </div>
         )}
 
@@ -73,7 +126,11 @@ const MainDashboard: React.FC = () => {
       {/* Global Modals & Toasts */}
       <ToastContainer />
       <CreateEventModal isOpen={showCreateEventModal} onClose={() => setShowCreateEventModal(false)} />
-      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+      <AuthModal 
+        isOpen={showAuthModal} 
+        onClose={() => setShowAuthModal(false)} 
+        defaultRole={authDefaultRole} 
+      />
 
       {/* Footer */}
       <footer className="mt-auto border-t border-slate-900 bg-slate-950/80 py-6 text-xs text-slate-500 no-print">
