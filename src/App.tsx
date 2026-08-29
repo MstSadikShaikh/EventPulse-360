@@ -1,15 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { EventProvider, useEvent } from './context/EventContext';
 import { Navbar } from './components/common/Navbar';
 import { ToastContainer } from './components/common/ToastContainer';
 import { CreateEventModal } from './components/common/CreateEventModal';
 import { AuthModal } from './components/common/AuthModal';
 import { AccessRestricted } from './components/common/AccessRestricted';
-import { ParticipantHub } from './components/participant/ParticipantHub';
-import { OrganizerDashboard } from './components/organizer/OrganizerDashboard';
-import { JudgePortal } from './components/judge/JudgePortal';
-import { LiveLeaderboard } from './components/leaderboard/LiveLeaderboard';
-import { Zap } from 'lucide-react';
+import { Zap, Loader2 } from 'lucide-react';
+
+// Route-based Code Splitting with React.lazy for high performance
+const ParticipantHub = lazy(() => import('./components/participant/ParticipantHub').then(m => ({ default: m.ParticipantHub })));
+const OrganizerDashboard = lazy(() => import('./components/organizer/OrganizerDashboard').then(m => ({ default: m.OrganizerDashboard })));
+const JudgePortal = lazy(() => import('./components/judge/JudgePortal').then(m => ({ default: m.JudgePortal })));
+const LiveLeaderboard = lazy(() => import('./components/leaderboard/LiveLeaderboard').then(m => ({ default: m.LiveLeaderboard })));
+
+const ComponentLoader: React.FC = () => (
+  <div className="min-h-[40vh] flex flex-col items-center justify-center space-y-3 py-12">
+    <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+    <span className="text-xs font-semibold text-slate-400">Loading module...</span>
+  </div>
+);
 
 const MainDashboard: React.FC = () => {
   const { role, loading, announcements, event, currentUser } = useEvent();
@@ -27,12 +36,9 @@ const MainDashboard: React.FC = () => {
   const isJudge = userRole === 'judge';
   const isParticipant = userRole === 'participant';
 
-  // Permission Checks:
-  // - Organizer can only view Organizer Desk & Participant Hub
-  // - Judge can ONLY view Judge Portal
-  // - Participant can ONLY view Participant Hub
+  // Strict RBAC Access Isolation
   const canViewOrganizer = isOrganizer;
-  const canViewJudge = isJudge; // Locked from Organizers!
+  const canViewJudge = isJudge;
   const canViewParticipant = isOrganizer || isParticipant || userRole === 'guest';
 
   // Latest pinned urgent announcement
@@ -81,46 +87,46 @@ const MainDashboard: React.FC = () => {
           </div>
         ) : (
           <div className="animate-in fade-in duration-300">
-            
-            {/* Participant View */}
-            {role === 'participant' && (
-              canViewParticipant ? (
-                <ParticipantHub />
-              ) : (
-                <AccessRestricted 
-                  requiredRole="participant" 
-                  onAuthenticate={() => openAuthWithRole('participant')} 
-                />
-              )
-            )}
+            <Suspense fallback={<ComponentLoader />}>
+              {/* Participant View */}
+              {role === 'participant' && (
+                canViewParticipant ? (
+                  <ParticipantHub />
+                ) : (
+                  <AccessRestricted 
+                    requiredRole="participant" 
+                    onAuthenticate={() => openAuthWithRole('participant')} 
+                  />
+                )
+              )}
 
-            {/* Organizer View */}
-            {role === 'organizer' && (
-              canViewOrganizer ? (
-                <OrganizerDashboard />
-              ) : (
-                <AccessRestricted 
-                  requiredRole="organizer" 
-                  onAuthenticate={() => openAuthWithRole('organizer')} 
-                />
-              )
-            )}
+              {/* Organizer View */}
+              {role === 'organizer' && (
+                canViewOrganizer ? (
+                  <OrganizerDashboard />
+                ) : (
+                  <AccessRestricted 
+                    requiredRole="organizer" 
+                    onAuthenticate={() => openAuthWithRole('organizer')} 
+                  />
+                )
+              )}
 
-            {/* Judge View - Strictly locked for non-judges */}
-            {role === 'judge' && (
-              canViewJudge ? (
-                <JudgePortal />
-              ) : (
-                <AccessRestricted 
-                  requiredRole="judge" 
-                  onAuthenticate={() => openAuthWithRole('judge')} 
-                />
-              )
-            )}
+              {/* Judge View - Strictly locked for non-judges */}
+              {role === 'judge' && (
+                canViewJudge ? (
+                  <JudgePortal />
+                ) : (
+                  <AccessRestricted 
+                    requiredRole="judge" 
+                    onAuthenticate={() => openAuthWithRole('judge')} 
+                  />
+                )
+              )}
 
-            {/* Live Arena Leaderboard (Always Public) */}
-            {role === 'leaderboard' && <LiveLeaderboard />}
-
+              {/* Live Arena Leaderboard (Always Public) */}
+              {role === 'leaderboard' && <LiveLeaderboard />}
+            </Suspense>
           </div>
         )}
 

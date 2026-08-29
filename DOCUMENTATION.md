@@ -214,19 +214,42 @@ EventPulse 360 includes comprehensive unit tests verifying data security, calcul
 ```bash
 $ npm test -- --run
 
- ✓ src/__tests__/eventpulse.test.ts (9 tests)
-   ✓ QR Ticket Generation - creates valid collision-proof ticket formats
-   ✓ Check-in Security - verifies unique QR code and prevents duplicate check-in
-   ✓ Rubric Scoring - calculates weighted total score accurately out of 100
-   ✓ Multi-Judge Averaging - aggregates multiple judge scorecards correctly
-   ✓ Team Matchmaking - accurately identifies skill gaps in open squads
-   ✓ RBAC Lockout - enforces access restrictions based on user roles
-   ✓ Team Recruitment - correctly updates role requirements when members join
-   ✓ Live Leaderboard - accurately ranks submissions with dynamic ties
-   ✓ Timestamp Formatting - correctly handles event date ranges
+ ✓ src/__tests__/eventpulse.test.ts (26 tests)
+   ✓ 1. QR Ticket Generation & Validation (ticketUtils)
+     ✓ should generate valid Ticket ID starting with EP360-TKT-
+     ✓ should generate 100 unique collision-free ticket IDs with sufficient entropy
+     ✓ should correctly reject malformed, empty, or malicious ticket codes
+     ✓ should normalize raw ticket codes, query URLs, and JSON payloads
+   ✓ 2. Gate Check-in Verification & Duplicate Blocking
+     ✓ should allow check-in for registered, pending attendee
+     ✓ should strictly block duplicate entry for already checked-in attendees
+     ✓ should return NOT_FOUND for non-existent ticket codes
+     ✓ should calculate attendance velocity and check-in percentages accurately
+     ✓ should aggregate dietary requirements correctly for catering logistics
+   ✓ 3. 5-Axis Rubric Score Calculation (scoringUtils)
+     ✓ should calculate weighted score accurately with standard weights (100-pt scale)
+     ✓ should calculate weighted score with customized rubric weights
+     ✓ should clamp scores between 0 and 100 boundary limits
+     ✓ should compute multi-judge average scores accurately
+     ✓ should handle empty or NaN judge scores gracefully
+     ✓ should rank submissions and break ties using Innovation criteria
+   ✓ 4. Team Matchmaking & Invite State Transitions
+     ✓ should filter candidate participants matching needed team roles
+     ✓ should update needed roles when a member joins
+     ✓ should toggle team recruitment status when roster is full
+     ✓ should transition invite state from pending to accepted or declined
+   ✓ 5. Role-Based Access Control (RBAC) Matrix
+     ✓ should grant organizer access only to authorized organizer dashboard
+     ✓ should strictly lock Judge Portal from Organizers and Participants
+     ✓ should allow public access to the Live Arena Leaderboard for all personas
+   ✓ 6. Security Sanitization, URL Safety & PIN Rate-Limiting (securityUtils)
+     ✓ should sanitize dangerous HTML tags and scripts to prevent XSS
+     ✓ should validate secure HTTP/HTTPS URLs and reject dangerous protocols
+     ✓ should enforce brute-force rate-limiting on PIN authentication
+     ✓ should prioritize urgent broadcasts with audio alert trigger flags
 
 Test Files: 1 passed (1)
-Tests:      9 passed (9)
+Tests:      26 passed (26)
 ```
 
 ---

@@ -2,7 +2,7 @@
 
 [![Deploy with Vercel](https://vercel.com/button)](https://eventpulse-360.vercel.app)
 [![Live Production URL](https://img.shields.io/badge/Live-eventpulse--360.vercel.app-6366f1?style=for-the-badge&logo=vercel)](https://eventpulse-360.vercel.app)
-[![Tests Passing](https://img.shields.io/badge/Tests-9%2F9%20Passing-10b981?style=for-the-badge&logo=vitest)](https://eventpulse-360.vercel.app)
+[![Tests Passing](https://img.shields.io/badge/Tests-26%2F26%20Passing-10b981?style=for-the-badge&logo=vitest)](https://eventpulse-360.vercel.app)
 [![React 19](https://img.shields.io/badge/React-19.0-61dafb?style=for-the-badge&logo=react)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178c6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org)
 
@@ -114,7 +114,7 @@ npm run build
 ```bash
 npm test -- --run
 ```
-EventPulse 360 includes 9 unit tests verifying ticket generation, check-in security, rubric scoring, RBAC lockout, and team matchmaking algorithms.
+EventPulse 360 includes 26 comprehensive unit tests verifying ticket generation, check-in security, rubric scoring, RBAC lockout, and team matchmaking algorithms.
 
 ---
 

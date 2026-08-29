@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useEvent } from '../../context/EventContext';
+import { checkPinRateLimit, recordFailedPinAttempt, resetPinRateLimit } from '../../lib/securityUtils';
 import { 
   Lock, 
   User, 
@@ -54,21 +55,49 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, defaultRo
 
   const handleOrganizerLogin = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Check rate-limit
+    const limitCheck = checkPinRateLimit('organizer-pin');
+    if (!limitCheck.allowed) {
+      addToast('Too Many Attempts', `Rate limit reached. Please wait ${limitCheck.remainingSeconds}s before trying again.`, 'urgent');
+      return;
+    }
+
     const success = loginAsOrganizer(organizerPin);
     if (success) {
+      resetPinRateLimit('organizer-pin');
       onClose();
     } else {
-      addToast('Invalid PIN', 'Enter default organizer PIN "admin123" or "1234"', 'warning');
+      const record = recordFailedPinAttempt('organizer-pin');
+      if (record.lockoutActive) {
+        addToast('Brute-force Lockout', `5 failed attempts. Locked out for ${record.lockoutSeconds} seconds.`, 'urgent');
+      } else {
+        addToast('Invalid PIN', 'Enter default organizer PIN "admin123" or "1234"', 'warning');
+      }
     }
   };
 
   const handleJudgeLogin = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Check rate-limit
+    const limitCheck = checkPinRateLimit('judge-pin');
+    if (!limitCheck.allowed) {
+      addToast('Too Many Attempts', `Rate limit reached. Please wait ${limitCheck.remainingSeconds}s before trying again.`, 'urgent');
+      return;
+    }
+
     const success = loginAsJudge(judgePin);
     if (success) {
+      resetPinRateLimit('judge-pin');
       onClose();
     } else {
-      addToast('Invalid Judge PIN', 'Enter a valid judge access PIN (e.g. 1111, 2222, 3333)', 'warning');
+      const record = recordFailedPinAttempt('judge-pin');
+      if (record.lockoutActive) {
+        addToast('Brute-force Lockout', `5 failed attempts. Locked out for ${record.lockoutSeconds} seconds.`, 'urgent');
+      } else {
+        addToast('Invalid Judge PIN', 'Enter a valid judge access PIN (e.g. 1111, 2222, 3333)', 'warning');
+      }
     }
   };
 
