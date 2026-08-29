@@ -57,9 +57,22 @@ export const QRScannerDesk: React.FC = () => {
         html5QrCodeRef.current = new Html5Qrcode('qr-reader-container');
       }
 
-      // Directly start with facingMode "user" (front webcam) or standard video device
+      // Step 1: Enumerate video input devices on Windows / Mac / Linux
+      let cameraConfig: any = true;
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        if (devices && devices.length > 0) {
+          // Use direct device ID of the first available webcam (avoids facingMode driver mismatch on Windows)
+          cameraConfig = devices[0].id;
+        }
+      } catch (e) {
+        // fallback to standard video config
+        cameraConfig = { video: true };
+      }
+
+      // Step 2: Start scanning with the detected camera ID
       await html5QrCodeRef.current.start(
-        { facingMode: 'user' },
+        cameraConfig,
         {
           fps: 10,
           qrbox: { width: 240, height: 240 },
@@ -82,7 +95,7 @@ export const QRScannerDesk: React.FC = () => {
       );
       addToast('Camera Online', 'Webcam is now scanning for attendee QR passes.', 'success');
     } catch (err: any) {
-      console.warn('Direct camera start failed, enabling interactive scanner mode:', err);
+      console.warn('Physical camera unavailable, enabling interactive scanner mode:', err);
       setIsScanning(false);
       setIsSimulating(true);
       
