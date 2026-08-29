@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Html5Qrcode, Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 import { useEvent } from '../../context/EventContext';
 import { 
   QrCode, 
@@ -10,16 +10,21 @@ import {
   UserCheck, 
   Zap, 
   Upload,
-  Sparkles
+  Sparkles,
+  CameraOff,
+  RefreshCw
 } from 'lucide-react';
 import type { Participant } from '../../types';
 
 export const QRScannerDesk: React.FC = () => {
-  const { participants, checkInParticipant } = useEvent();
+  const { participants, checkInParticipant, addToast } = useEvent();
   
   const [manualCode, setManualCode] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [camerasList, setCamerasList] = useState<{ id: string; label: string }[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>('');
+  
   const [lastScannedResult, setLastScannedResult] = useState<{
     success: boolean;
     participant?: Participant;
@@ -27,56 +32,102 @@ export const QRScannerDesk: React.FC = () => {
     timestamp: Date;
   } | null>(null);
 
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize Html5QrcodeScanner when scanning is active
-  useEffect(() => {
-    if (isScanning) {
-      setCameraError(null);
+  const stopScanner = async () => {
+    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
       try {
-        const scanner = new Html5QrcodeScanner(
-          'qr-reader',
-          { 
-            fps: 10, 
-            qrbox: { width: 250, height: 250 },
-            rememberLastUsedCamera: true
-          },
-          false
-        );
-
-        scanner.render(
-          async (decodedText) => {
-            scanner.pause(true);
-            const result = await checkInParticipant(decodedText);
-            setLastScannedResult({ ...result, timestamp: new Date() });
-            setTimeout(() => {
-              try { scanner.resume(); } catch { /* ignore */ }
-            }, 2000);
-          },
-          (error) => {
-            if (typeof error === 'string' && error.includes('Requested device not found')) {
-              setCameraError('No webcam hardware detected on this device. You can upload a QR image or use rapid manual search below.');
-            }
-          }
-        );
-
-        scannerRef.current = scanner;
+        await html5QrCodeRef.current.stop();
       } catch (err) {
-        setCameraError('Camera access not supported in this browser window. Use manual barcode search or file upload.');
+        console.warn('Error stopping scanner:', err);
       }
+    }
+    setIsScanning(false);
+  };
 
-      return () => {
-        if (scannerRef.current) {
-          try {
-            scannerRef.current.clear().catch(console.error);
-          } catch {
-            // ignore
+  const startScanner = async (cameraIdToUse?: string) => {
+    setCameraError(null);
+    setIsScanning(true);
+
+    try {
+      // Step 1: Explicitly request browser camera permission prompt
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          // Stop initial test stream so html5QrCode can take over
+          stream.getTracks().forEach(track => track.stop());
+        } catch (permErr: any) {
+          if (permErr.name === 'NotAllowedError' || permErr.name === 'PermissionDeniedError') {
+            setCameraError('Camera access was blocked by browser. Please click the lock icon in your browser URL bar and allow Camera permissions.');
+            setIsScanning(false);
+            return;
           }
         }
-      };
+      }
+
+      // Step 2: Discover all cameras
+      const devices = await Html5Qrcode.getCameras();
+      if (!devices || devices.length === 0) {
+        setCameraError('No webcam hardware found on this computer. You can upload a QR pass image or use manual ticket search below.');
+        setIsScanning(false);
+        return;
+      }
+
+      setCamerasList(devices.map(d => ({ id: d.id, label: d.label || `Camera ${d.id}` })));
+      const chosenId = cameraIdToUse || selectedCameraId || devices[0].id;
+      setSelectedCameraId(chosenId);
+
+      // Step 3: Initialize Html5Qrcode scanner instance
+      if (!html5QrCodeRef.current) {
+        html5QrCodeRef.current = new Html5Qrcode('qr-reader-container');
+      }
+
+      await html5QrCodeRef.current.start(
+        chosenId,
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.333334
+        },
+        async (decodedText) => {
+          // Play scan beep and check in
+          const result = await checkInParticipant(decodedText);
+          setLastScannedResult({ ...result, timestamp: new Date() });
+          
+          // Brief pause after successful scan
+          if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+            html5QrCodeRef.current.pause(true);
+            setTimeout(() => {
+              try {
+                if (html5QrCodeRef.current) {
+                  html5QrCodeRef.current.resume();
+                }
+              } catch {
+                /* ignore */
+              }
+            }, 2500);
+          }
+        },
+        () => {
+          // Frame parse error (ignore frame by frame scanning logs)
+        }
+      );
+    } catch (err: any) {
+      console.error('Camera start error:', err);
+      setCameraError(err.message || 'Could not start camera. Please verify device permissions or use image upload.');
+      setIsScanning(false);
     }
-  }, [isScanning, checkInParticipant]);
+  };
+
+  // Cleanup scanner on unmount
+  useEffect(() => {
+    return () => {
+      if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+        html5QrCodeRef.current.stop().catch(console.error);
+      }
+    };
+  }, []);
 
   // Scan QR code from an uploaded image file
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -84,14 +135,15 @@ export const QRScannerDesk: React.FC = () => {
     if (!file) return;
 
     try {
-      const html5QrCode = new Html5Qrcode('file-scanner-hidden');
-      const decodedText = await html5QrCode.scanFile(file, true);
+      const scanner = new Html5Qrcode('file-scanner-temp');
+      const decodedText = await scanner.scanFile(file, true);
       const result = await checkInParticipant(decodedText);
       setLastScannedResult({ ...result, timestamp: new Date() });
+      await scanner.clear();
     } catch (err) {
       setLastScannedResult({
         success: false,
-        message: 'Could not read a valid QR code from the uploaded image.',
+        message: 'Could not detect a QR code from this image. Please upload a clear ticket badge image.',
         timestamp: new Date()
       });
     }
@@ -118,8 +170,8 @@ export const QRScannerDesk: React.FC = () => {
   return (
     <div className="space-y-6">
       
-      {/* Hidden div for file scanning */}
-      <div id="file-scanner-hidden" className="hidden" />
+      {/* Hidden container for file scan */}
+      <div id="file-scanner-temp" className="hidden" />
 
       {/* Top Quick Stats Banner */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -169,14 +221,14 @@ export const QRScannerDesk: React.FC = () => {
         <div className="lg:col-span-7 space-y-4">
           <div className="p-5 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-2xl space-y-4">
             
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
                   <Camera className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">Interactive QR Check-in Terminal</h3>
-                  <p className="text-[11px] text-slate-400">Instant camera scanner & rapid barcode verification</p>
+                  <h3 className="text-sm font-bold text-white">QR Gate Check-in Terminal</h3>
+                  <p className="text-[11px] text-slate-400">Webcam Scanner • Image File Upload • Instant Barcode Search</p>
                 </div>
               </div>
 
@@ -197,48 +249,74 @@ export const QRScannerDesk: React.FC = () => {
                   className="hidden"
                 />
 
-                <button
-                  onClick={() => setIsScanning(!isScanning)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                    isScanning 
-                      ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/40' 
-                      : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30'
-                  }`}
-                >
-                  {isScanning ? 'Stop Camera' : 'Start Camera Scanner'}
-                </button>
+                {isScanning ? (
+                  <button
+                    onClick={stopScanner}
+                    className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-900/40 flex items-center gap-1"
+                  >
+                    <CameraOff className="w-3.5 h-3.5" />
+                    Stop Camera
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => startScanner()}
+                    className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 flex items-center gap-1.5"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    Start Camera Scanner
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Camera View Area */}
-            {isScanning ? (
-              <div className="relative rounded-2xl overflow-hidden border-2 border-indigo-500/40 bg-slate-950 p-2">
-                {cameraError && (
-                  <div className="p-3 mb-2 rounded-xl bg-amber-950/60 border border-amber-500/40 text-amber-300 text-xs flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{cameraError}</span>
-                  </div>
-                )}
-                <div id="qr-reader" className="w-full text-slate-100" />
-                <div className="text-center text-[11px] text-slate-400 py-1">
-                  Point attendee QR pass at camera for instant automatic verification.
-                </div>
-              </div>
-            ) : (
-              <div className="p-8 rounded-2xl bg-slate-950/60 border border-dashed border-slate-800 text-center space-y-3">
-                <QrCode className="w-12 h-12 text-slate-600 mx-auto" />
-                <div>
-                  <h4 className="text-xs font-bold text-slate-300">Camera Scanner Ready</h4>
-                  <p className="text-[11px] text-slate-500 max-w-sm mx-auto mt-1">
-                    Click "Start Camera Scanner" to scan via webcam, or upload an image badge, or use the fast manual search below.
-                  </p>
-                </div>
+            {/* Camera Select Dropdown (if multiple cameras exist) */}
+            {camerasList.length > 1 && isScanning && (
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-slate-400">Select Camera:</span>
+                <select
+                  value={selectedCameraId}
+                  onChange={(e) => {
+                    setSelectedCameraId(e.target.value);
+                    startScanner(e.target.value);
+                  }}
+                  className="px-2 py-1 rounded bg-slate-950 border border-slate-800 text-slate-200 text-xs"
+                >
+                  {camerasList.map(cam => (
+                    <option key={cam.id} value={cam.id}>{cam.label}</option>
+                  ))}
+                </select>
               </div>
             )}
 
+            {/* Camera View Area */}
+            <div className="relative rounded-2xl overflow-hidden border-2 border-indigo-500/30 bg-slate-950 p-2 min-h-[260px] flex flex-col items-center justify-center">
+              
+              {cameraError && (
+                <div className="w-full p-4 mb-3 rounded-xl bg-amber-950/70 border border-amber-500/50 text-amber-300 text-xs flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">Camera Notice:</span>
+                    <span>{cameraError}</span>
+                  </div>
+                </div>
+              )}
+
+              <div id="qr-reader-container" className={`w-full ${!isScanning ? 'hidden' : ''}`} />
+
+              {!isScanning && (
+                <div className="p-6 text-center space-y-2">
+                  <QrCode className="w-12 h-12 text-slate-600 mx-auto" />
+                  <h4 className="text-xs font-bold text-slate-300">Scanner Ready</h4>
+                  <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                    Click <strong>"Start Camera Scanner"</strong> to prompt camera permissions, or upload a badge image, or enter a ticket ID below.
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* Manual Ticket Input */}
-            <form onSubmit={handleManualSubmit} className="space-y-2 pt-2">
-              <label className="block text-slate-300 text-xs font-semibold">Manual Barcode / Ticket ID Search</label>
+            <form onSubmit={handleManualSubmit} className="space-y-2 pt-1">
+              <label className="block text-slate-300 text-xs font-semibold">Manual Ticket ID / Barcode Search</label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -266,7 +344,7 @@ export const QRScannerDesk: React.FC = () => {
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                1-Click Quick Check-in Test (Simulate Physical Gate Entry)
+                1-Click Quick Gate Simulation
               </span>
               <span className="text-[10px] text-slate-500">Instant test</span>
             </div>
@@ -287,7 +365,7 @@ export const QRScannerDesk: React.FC = () => {
                       ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
                       : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                   }`}>
-                    {p.is_checked_in ? 'In' : 'Scan'}
+                    {p.is_checked_in ? 'Verified In' : 'Click to Scan'}
                   </span>
                 </button>
               ))}
@@ -295,7 +373,7 @@ export const QRScannerDesk: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Column: Live Scan Result & Attendee Card */}
+        {/* Right Column: Live Scan Result */}
         <div className="lg:col-span-5 space-y-4">
           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Latest Gate Verification</h4>
 

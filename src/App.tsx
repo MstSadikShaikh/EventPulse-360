@@ -27,9 +27,12 @@ const MainDashboard: React.FC = () => {
   const isJudge = userRole === 'judge';
   const isParticipant = userRole === 'participant';
 
-  // Permission Checks
+  // Permission Checks:
+  // - Organizer can only view Organizer Desk & Participant Hub
+  // - Judge can ONLY view Judge Portal
+  // - Participant can ONLY view Participant Hub
   const canViewOrganizer = isOrganizer;
-  const canViewJudge = isOrganizer || isJudge;
+  const canViewJudge = isJudge; // Locked from Organizers!
   const canViewParticipant = isOrganizer || isParticipant || userRole === 'guest';
 
   // Latest pinned urgent announcement
@@ -103,7 +106,7 @@ const MainDashboard: React.FC = () => {
               )
             )}
 
-            {/* Judge View */}
+            {/* Judge View - Strictly locked for non-judges */}
             {role === 'judge' && (
               canViewJudge ? (
                 <JudgePortal />

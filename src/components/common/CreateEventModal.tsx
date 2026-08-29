@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useEvent } from '../../context/EventContext';
-import { Plus, X, Calendar, MapPin, Tag, Sparkles, Award } from 'lucide-react';
+import { Plus, X, Calendar, MapPin, Tag, Sparkles, Clock } from 'lucide-react';
 import type { RubricCriterion } from '../../types';
 
 interface CreateEventModalProps {
@@ -15,7 +15,14 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
   const [eventType, setEventType] = useState('Tech Conference');
   const [tagline, setTagline] = useState('');
   const [description, setDescription] = useState('');
-  const [location, setLocation] = useState('Main Convention Hall & Online');
+  const [location, setLocation] = useState('Main Convention Hall & Hybrid Online');
+  
+  // Date & Time fields
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startTime, setStartTime] = useState('09:00');
+  const [endDate, setEndDate] = useState(new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0]);
+  const [endTime, setEndTime] = useState('18:00');
+
   const [tracks, setTracks] = useState<string[]>(['Keynotes & Panels', 'Workshops & Labs', 'Startup Expo', 'Research Papers']);
   const [newTrackInput, setNewTrackInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -77,7 +84,9 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
         description: description || tagline,
         location,
         tracks,
-        rubrics: defaultRubrics
+        rubrics: defaultRubrics,
+        start_date: `${startDate}T${startTime}:00Z`,
+        end_date: `${endDate}T${endTime}:00Z`
       });
       onClose();
     } finally {
@@ -96,8 +105,8 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
               <Calendar className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">Create New Event</h3>
-              <p className="text-xs text-slate-400">Launch a conference, tech fest, symposium, or competition</p>
+              <h3 className="text-base font-bold text-white">Create & Launch New Event</h3>
+              <p className="text-xs text-slate-400">Host a Conference, Tech Fest, Hackathon, or Startup Pitch Day</p>
             </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1.5 rounded-lg">
@@ -110,7 +119,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
           
           {/* Preset Selector */}
           <div>
-            <label className="block text-slate-300 font-semibold mb-1.5">Choose Event Template</label>
+            <label className="block text-slate-300 font-semibold mb-1.5">Event Type Template</label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {['Tech Conference', 'Hackathon', 'Startup Pitch Competition', 'College / University Fest'].map((type) => (
                 <button
@@ -151,6 +160,49 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
               onChange={(e) => setTagline(e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 focus:outline-none focus:border-indigo-500"
             />
+          </div>
+
+          {/* Date & Time Pickers */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-2xl bg-slate-950/80 border border-slate-800">
+            <div className="space-y-1.5">
+              <label className="block text-slate-300 font-semibold flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-indigo-400" /> Start Date & Time
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="px-2.5 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-200 focus:outline-none focus:border-indigo-500 text-xs"
+                />
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="px-2.5 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-200 focus:outline-none focus:border-indigo-500 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-slate-300 font-semibold flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-cyan-400" /> End Date & Time
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="px-2.5 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-200 focus:outline-none focus:border-indigo-500 text-xs"
+                />
+                <input
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  className="px-2.5 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-200 focus:outline-none focus:border-indigo-500 text-xs"
+                />
+              </div>
+            </div>
           </div>
 
           <div>

@@ -39,7 +39,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenCreateEvent, onOpenAuth })
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
-  // Determine permissions for current user
+  // Strict role segregation:
+  // - Participant: only Participant Hub + Live Arena
+  // - Judge: only Judge Portal + Live Arena
+  // - Organizer: Organizer Desk + Participant Hub + Live Arena (Judge portal LOCKED!)
   const userRole = currentUser?.role || 'guest';
   const isOrganizer = userRole === 'organizer';
   const isJudge = userRole === 'judge';
@@ -47,7 +50,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenCreateEvent, onOpenAuth })
 
   const canAccessParticipant = isOrganizer || isParticipant || userRole === 'guest';
   const canAccessOrganizer = isOrganizer;
-  const canAccessJudge = isOrganizer || isJudge;
+  const canAccessJudge = isJudge; // Organizer CANNOT access Judge portal!
   const canAccessLeaderboard = true;
 
   const handleNavClick = (targetRole: UserRole) => {
@@ -83,7 +86,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenCreateEvent, onOpenAuth })
       role: 'judge', 
       label: 'Judge Portal', 
       icon: <Gavel className="w-4 h-4" />, 
-      isLocked: !isOrganizer && !isJudge 
+      isLocked: !isJudge // Locked for Organizers and Participants!
     },
     { 
       role: 'leaderboard', 
@@ -174,7 +177,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenCreateEvent, onOpenAuth })
           {/* Right Action Tools: Create Event, Login/Profile, Sound FX & Sync */}
           <div className="flex items-center gap-2">
             
-            {/* Create Event (Organizer only or guest) */}
+            {/* Create Event (Organizer only) */}
             {isOrganizer && (
               <button
                 onClick={onOpenCreateEvent}
