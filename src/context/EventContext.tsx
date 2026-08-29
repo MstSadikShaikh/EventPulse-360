@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { 
+import type { 
   UserRole, 
   EventItem, 
   Participant, 
@@ -20,10 +20,33 @@ interface ToastMessage {
   timestamp: number;
 }
 
+export interface CurrentUser {
+  id: string;
+  name: string;
+  email: string;
+  role: 'participant' | 'organizer' | 'judge' | 'guest';
+  avatarUrl?: string;
+  participantData?: Participant;
+  judgeData?: Judge;
+}
+
 interface EventContextType {
   role: UserRole;
   setRole: (role: UserRole) => void;
+  currentUser: CurrentUser | null;
+  setCurrentUser: (user: CurrentUser | null) => void;
   event: EventItem | null;
+  eventsList: EventItem[];
+  switchEvent: (eventId: string) => void;
+  createNewEvent: (eventData: {
+    title: string;
+    tagline: string;
+    description: string;
+    location: string;
+    tracks: string[];
+    rubrics: RubricCriterion[];
+  }) => Promise<EventItem>;
+  
   participants: Participant[];
   teams: Team[];
   submissions: Submission[];
@@ -39,6 +62,12 @@ interface EventContextType {
   removeToast: (id: string) => void;
   addToast: (title: string, message: string, type?: 'success' | 'urgent' | 'info' | 'warning') => void;
   
+  // Auth simulation
+  loginAsParticipant: (emailOrTicket: string) => boolean;
+  loginAsJudge: (pin: string) => boolean;
+  loginAsOrganizer: (pin: string) => boolean;
+  logout: () => void;
+
   // Action Handlers
   registerParticipant: (data: Omit<Participant, 'id' | 'event_id' | 'qr_ticket_id' | 'is_checked_in' | 'created_at'>) => Promise<Participant>;
   checkInParticipant: (qrCodeOrId: string) => Promise<{ success: boolean; participant?: Participant; message: string }>;
@@ -59,6 +88,7 @@ const EventContext = createContext<EventContextType | undefined>(undefined);
 export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [role, setRole] = useState<UserRole>('participant');
   const [event, setEvent] = useState<EventItem | null>(null);
+  const [eventsList, setEventsList] = useState<EventItem[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -70,6 +100,14 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [activeParticipant, setActiveParticipant] = useState<Participant | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [soundEnabled, setSoundEnabledState] = useState<boolean>(true);
+
+  // Current logged in user
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>({
+    id: 'user-organizer',
+    name: 'Lead Organizer',
+    email: 'admin@eventpulse360.io',
+    role: 'organizer'
+  });
 
   const setSoundEnabled = (enabled: boolean) => {
     sounds.setSoundEnabled(enabled);
@@ -106,7 +144,7 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         evaluationsRes,
         announcementsRes
       ] = await Promise.all([
-        supabase.from('events').select('*').limit(1).single(),
+        supabase.from('events').select('*').order('created_at', { ascending: false }),
         supabase.from('participants').select('*').order('created_at', { ascending: false }),
         supabase.from('teams').select('*').order('created_at', { ascending: false }),
         supabase.from('submissions').select('*').order('submitted_at', { ascending: false }),
@@ -115,8 +153,11 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         supabase.from('announcements').select('*').order('created_at', { ascending: false })
       ]);
 
-      if (eventsRes.data) {
-        setEvent(eventsRes.data);
+      if (eventsRes.data && eventsRes.data.length > 0) {
+        setEventsList(eventsRes.data);
+        if (!event) {
+          setEvent(eventsRes.data[0]);
+        }
       }
       if (participantsRes.data) {
         setParticipants(participantsRes.data);
@@ -147,26 +188,19 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     } finally {
       setLoading(false);
     }
-  }, [activeJudge, activeParticipant]);
+  }, [activeJudge, activeParticipant, event]);
 
   useEffect(() => {
     fetchData();
 
-    // Subscribe to Supabase Realtime Channels for instant live updates across devices
+    // Subscribe to Supabase Realtime Channels
     const channel = supabase
       .channel('eventpulse-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'participants' }, () => {
-        fetchData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, () => {
-        fetchData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' }, () => {
-        fetchData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'evaluations' }, () => {
-        fetchData();
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'participants' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'evaluations' }, () => fetchData())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'announcements' }, (payload) => {
         const newAnn = payload.new as Announcement;
         addToast(newAnn.title, newAnn.message, newAnn.category === 'urgent' ? 'urgent' : 'info');
@@ -178,6 +212,119 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       supabase.removeChannel(channel);
     };
   }, [fetchData, addToast]);
+
+  // Switch Active Event
+  const switchEvent = (eventId: string) => {
+    const target = eventsList.find(e => e.id === eventId);
+    if (target) {
+      setEvent(target);
+      addToast('Event Switched', `Now managing "${target.title}"`, 'info');
+    }
+  };
+
+  // Create a brand new event
+  const createNewEvent = async (eventData: {
+    title: string;
+    tagline: string;
+    description: string;
+    location: string;
+    tracks: string[];
+    rubrics: RubricCriterion[];
+  }): Promise<EventItem> => {
+    const newEv = {
+      title: eventData.title,
+      tagline: eventData.tagline,
+      description: eventData.description,
+      location: eventData.location,
+      tracks: eventData.tracks,
+      rubrics: eventData.rubrics,
+      is_active: true
+    };
+
+    const { data: inserted, error } = await supabase
+      .from('events')
+      .insert([newEv])
+      .select()
+      .single();
+
+    const createdEvent = inserted || {
+      id: 'ev-' + Date.now(),
+      ...newEv,
+      start_date: new Date().toISOString(),
+      end_date: new Date(Date.now() + 86400000 * 2).toISOString()
+    };
+
+    setEventsList(prev => [createdEvent, ...prev]);
+    setEvent(createdEvent);
+    sounds.playSuccess();
+    addToast('Event Created! 🎉', `"${createdEvent.title}" is now active and ready for registrations.`, 'success');
+    return createdEvent;
+  };
+
+  // Auth: Participant Login
+  const loginAsParticipant = (emailOrTicket: string): boolean => {
+    const target = participants.find(p => 
+      p.email.toLowerCase() === emailOrTicket.trim().toLowerCase() ||
+      p.qr_ticket_id.toLowerCase() === emailOrTicket.trim().toLowerCase()
+    );
+
+    if (target) {
+      setActiveParticipant(target);
+      setCurrentUser({
+        id: target.id,
+        name: target.name,
+        email: target.email,
+        role: 'participant',
+        participantData: target
+      });
+      setRole('participant');
+      addToast('Logged In', `Welcome back, ${target.name}!`, 'success');
+      return true;
+    }
+    return false;
+  };
+
+  // Auth: Judge Login
+  const loginAsJudge = (pin: string): boolean => {
+    const target = judges.find(j => j.access_pin === pin.trim());
+    if (target) {
+      setActiveJudge(target);
+      setCurrentUser({
+        id: target.id,
+        name: target.name,
+        email: target.email,
+        role: 'judge',
+        avatarUrl: target.avatar_url,
+        judgeData: target
+      });
+      setRole('judge');
+      addToast('Judge Verified', `Welcome, ${target.name}.`, 'success');
+      return true;
+    }
+    return false;
+  };
+
+  // Auth: Organizer Login
+  const loginAsOrganizer = (pin: string): boolean => {
+    if (pin.trim() === 'admin123' || pin.trim() === '1234') {
+      setCurrentUser({
+        id: 'admin',
+        name: 'Event Organizer',
+        email: 'organizer@eventpulse.io',
+        role: 'organizer'
+      });
+      setRole('organizer');
+      addToast('Organizer Mode', 'Master event controls unlocked.', 'success');
+      return true;
+    }
+    return false;
+  };
+
+  const logout = () => {
+    setCurrentUser(null);
+    setRole('leaderboard');
+    addToast('Signed Out', 'You have been logged out.', 'info');
+  };
 
   // Action: Register Participant
   const registerParticipant = async (data: Omit<Participant, 'id' | 'event_id' | 'qr_ticket_id' | 'is_checked_in' | 'created_at'>): Promise<Participant> => {
@@ -207,13 +354,19 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       .single();
 
     if (error || !inserted) {
-      // Fallback
       const localP: Participant = {
         id: 'p-' + Date.now(),
         ...newParticipantData
       };
       setParticipants(prev => [localP, ...prev]);
       setActiveParticipant(localP);
+      setCurrentUser({
+        id: localP.id,
+        name: localP.name,
+        email: localP.email,
+        role: 'participant',
+        participantData: localP
+      });
       sounds.playSuccess();
       addToast('Registration Confirmed!', `Welcome, ${localP.name}. Your QR Pass is ready.`, 'success');
       return localP;
@@ -221,12 +374,19 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     setParticipants(prev => [inserted, ...prev]);
     setActiveParticipant(inserted);
+    setCurrentUser({
+      id: inserted.id,
+      name: inserted.name,
+      email: inserted.email,
+      role: 'participant',
+      participantData: inserted
+    });
     sounds.playSuccess();
     addToast('Registration Confirmed!', `Welcome, ${inserted.name}. Your QR Pass is ready.`, 'success');
     return inserted;
   };
 
-  // Action: Check-in Participant with QR Code or Ticket ID
+  // Action: Check-in Participant
   const checkInParticipant = async (qrCodeOrId: string): Promise<{ success: boolean; participant?: Participant; message: string }> => {
     const cleanId = qrCodeOrId.trim();
     const target = participants.find(p => 
@@ -282,7 +442,7 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       is_open: true
     };
 
-    const { data: inserted, error } = await supabase
+    const { data: inserted } = await supabase
       .from('teams')
       .insert([newTeamData])
       .select()
@@ -307,12 +467,10 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Action: Join Team
   const joinTeam = async (participantId: string, teamId: string): Promise<boolean> => {
-    const { error } = await supabase
+    await supabase
       .from('participants')
       .update({ team_id: teamId, looking_for_team: false })
       .eq('id', participantId);
-
-    if (error) console.warn('Supabase join team error', error);
 
     setParticipants(prev => prev.map(p => p.id === participantId ? { ...p, team_id: teamId, looking_for_team: false } : p));
     if (activeParticipant && activeParticipant.id === participantId) {
@@ -326,12 +484,10 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Action: Leave Team
   const leaveTeam = async (participantId: string): Promise<boolean> => {
-    const { error } = await supabase
+    await supabase
       .from('participants')
       .update({ team_id: null, looking_for_team: true })
       .eq('id', participantId);
-
-    if (error) console.warn('Supabase leave team error', error);
 
     setParticipants(prev => prev.map(p => p.id === participantId ? { ...p, team_id: null, looking_for_team: true } : p));
     if (activeParticipant && activeParticipant.id === participantId) {
@@ -359,7 +515,7 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       submitted_at: new Date().toISOString()
     };
 
-    const { data: inserted, error } = await supabase
+    const { data: inserted } = await supabase
       .from('submissions')
       .insert([submissionData])
       .select()
@@ -390,7 +546,7 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       updated_at: new Date().toISOString()
     };
 
-    const { data: inserted, error } = await supabase
+    const { data: inserted } = await supabase
       .from('evaluations')
       .upsert([evaluationData], { onConflict: 'submission_id, judge_id' })
       .select()
@@ -423,7 +579,7 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       created_at: new Date().toISOString()
     };
 
-    const { data: inserted, error } = await supabase
+    const { data: inserted } = await supabase
       .from('announcements')
       .insert([annData])
       .select()
@@ -442,12 +598,11 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   // Action: Update Rubrics
   const updateRubrics = async (rubrics: RubricCriterion[]) => {
     if (!event) return;
-    const { error } = await supabase
+    await supabase
       .from('events')
       .update({ rubrics })
       .eq('id', event.id);
 
-    if (error) console.warn('Supabase rubric update error', error);
     setEvent(prev => prev ? { ...prev, rubrics } : null);
     addToast('Rubric Updated', 'Judging criteria & weights saved.', 'success');
   };
@@ -462,7 +617,12 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     <EventContext.Provider value={{
       role,
       setRole,
+      currentUser,
+      setCurrentUser,
       event,
+      eventsList,
+      switchEvent,
+      createNewEvent,
       participants,
       teams,
       submissions,
@@ -477,6 +637,10 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       toasts,
       removeToast,
       addToast,
+      loginAsParticipant,
+      loginAsJudge,
+      loginAsOrganizer,
+      logout,
       registerParticipant,
       checkInParticipant,
       createTeam,

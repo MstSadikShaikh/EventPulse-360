@@ -1,6 +1,6 @@
 import React from 'react';
 import { useEvent } from '../../context/EventContext';
-import { UserRole } from '../../types';
+import type { UserRole } from '../../types';
 import { 
   Sparkles, 
   Users, 
@@ -10,23 +10,29 @@ import {
   Volume2, 
   VolumeX, 
   RefreshCw, 
-  HelpCircle, 
-  Layers
+  Plus, 
+  Calendar,
+  LogOut,
+  User
 } from 'lucide-react';
 
 interface NavbarProps {
-  onOpenArchitecture: () => void;
-  onOpenJudgeGuide: () => void;
+  onOpenCreateEvent: () => void;
+  onOpenAuth: (role?: 'participant' | 'organizer' | 'judge') => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onOpenArchitecture, onOpenJudgeGuide }) => {
+export const Navbar: React.FC<NavbarProps> = ({ onOpenCreateEvent, onOpenAuth }) => {
   const { 
     role, 
     setRole, 
     event, 
+    eventsList, 
+    switchEvent, 
     resetToSampleData, 
     soundEnabled, 
     setSoundEnabled,
+    currentUser,
+    logout,
     loading 
   } = useEvent();
 
@@ -38,11 +44,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenArchitecture, onOpenJudgeG
   ];
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 w-full border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl no-print">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-20 gap-4">
           
-          {/* Brand Logo & Live Status */}
+          {/* Brand Logo & Event Switcher */}
           <div className="flex items-center gap-3">
             <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 p-0.5 shadow-lg shadow-indigo-500/25">
               <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
@@ -56,16 +62,29 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenArchitecture, onOpenJudgeG
                 </span>
                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  Supabase Live
+                  Live Sync
                 </span>
               </div>
-              <p className="text-xs text-slate-400 truncate max-w-[200px] sm:max-w-xs hidden md:block">
-                {event?.title || 'Global AI & Web3 Hackathon'}
-              </p>
+              
+              {/* Event Switcher Dropdown */}
+              <div className="flex items-center gap-1 mt-0.5">
+                <select
+                  value={event?.id || ''}
+                  onChange={(e) => switchEvent(e.target.value)}
+                  className="bg-transparent text-xs text-slate-300 font-semibold focus:outline-none border-b border-dashed border-slate-700 cursor-pointer max-w-[190px] sm:max-w-[240px] truncate"
+                  title="Switch Active Event"
+                >
+                  {eventsList.map(ev => (
+                    <option key={ev.id} value={ev.id} className="bg-slate-900 text-white">
+                      {ev.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
-          {/* Center: Role Switcher (Multi-Role Mode) */}
+          {/* Center: Role Switcher / Navigation */}
           <div className="flex items-center p-1 rounded-xl bg-slate-900/90 border border-slate-800 shadow-inner">
             {navItems.map((item) => {
               const isActive = role === item.role;
@@ -93,34 +112,44 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenArchitecture, onOpenJudgeG
             })}
           </div>
 
-          {/* Right Action Tools: Architecture Guide, Q&A Cheat Sheet, Audio & Refresh */}
+          {/* Right Action Tools: Create Event, Login/Profile, Sound FX & Sync */}
           <div className="flex items-center gap-2">
             
-            {/* System Architecture Wireframe Modal Trigger */}
+            {/* Create Event Button */}
             <button
-              onClick={onOpenArchitecture}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-indigo-950/60 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-900/60 transition-colors shadow-sm"
-              title="View Multi-Role Flow & System Architecture"
+              onClick={onOpenCreateEvent}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:opacity-90 text-white shadow-md shadow-indigo-600/20 transition-all"
+              title="Organize / Create a New Event"
             >
-              <Layers className="w-4 h-4 text-indigo-400" />
-              <span className="hidden lg:inline">System Flow</span>
+              <Plus className="w-4 h-4" />
+              <span className="hidden lg:inline">Create Event</span>
             </button>
 
-            {/* Judge Q&A Guide Trigger */}
-            <button
-              onClick={onOpenJudgeGuide}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-cyan-950/60 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-900/60 transition-colors shadow-sm"
-              title="Open Hackathon Judge Q&A Cheat Sheet"
-            >
-              <HelpCircle className="w-4 h-4 text-cyan-400" />
-              <span className="hidden lg:inline">Judge Q&A</span>
-            </button>
+            {/* Auth / Role Sign In Modal */}
+            {currentUser ? (
+              <button
+                onClick={() => onOpenAuth()}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-slate-900 border border-slate-800 text-slate-200 hover:border-indigo-500 transition-colors"
+                title="Current Session Profile"
+              >
+                <User className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="hidden xl:inline truncate max-w-[100px]">{currentUser.name.split(' ')[0]}</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => onOpenAuth()}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-slate-900 border border-slate-800 text-slate-200 hover:border-indigo-500 transition-colors"
+              >
+                <User className="w-4 h-4 text-indigo-400" />
+                <span>Login</span>
+              </button>
+            )}
 
             {/* Sound FX Toggle */}
             <button
               onClick={() => setSoundEnabled(!soundEnabled)}
               className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition-colors"
-              title={soundEnabled ? 'Mute Sounds' : 'Enable Sounds'}
+              title={soundEnabled ? 'Mute Audio Alerts' : 'Enable Audio Alerts'}
               aria-label="Sound toggle"
             >
               {soundEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4" />}
@@ -131,7 +160,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenArchitecture, onOpenJudgeG
               onClick={resetToSampleData}
               disabled={loading}
               className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition-colors"
-              title="Sync Latest Database Records"
+              title="Sync Latest Supabase Database Records"
               aria-label="Sync data"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-400' : ''}`} />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeScanner } from 'html5-qrcode';
 import { useEvent } from '../../context/EventContext';
 import { 
   QrCode, 
@@ -8,17 +8,18 @@ import {
   CheckCircle2, 
   AlertCircle, 
   UserCheck, 
-  Sparkles, 
   Zap, 
-  RefreshCw 
+  Upload,
+  Sparkles
 } from 'lucide-react';
-import { Participant } from '../../types';
+import type { Participant } from '../../types';
 
 export const QRScannerDesk: React.FC = () => {
-  const { participants, checkInParticipant, addToast } = useEvent();
+  const { participants, checkInParticipant } = useEvent();
   
   const [manualCode, setManualCode] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const [lastScannedResult, setLastScannedResult] = useState<{
     success: boolean;
     participant?: Participant;
@@ -27,43 +28,74 @@ export const QRScannerDesk: React.FC = () => {
   } | null>(null);
 
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize Html5QrcodeScanner when scanning is active
   useEffect(() => {
     if (isScanning) {
-      const scanner = new Html5QrcodeScanner(
-        'qr-reader',
-        { 
-          fps: 10, 
-          qrbox: { width: 250, height: 250 },
-          rememberLastUsedCamera: true
-        },
-        /* verbose= */ false
-      );
+      setCameraError(null);
+      try {
+        const scanner = new Html5QrcodeScanner(
+          'qr-reader',
+          { 
+            fps: 10, 
+            qrbox: { width: 250, height: 250 },
+            rememberLastUsedCamera: true
+          },
+          false
+        );
 
-      scanner.render(
-        async (decodedText) => {
-          scanner.pause(true);
-          const result = await checkInParticipant(decodedText);
-          setLastScannedResult({ ...result, timestamp: new Date() });
-          setTimeout(() => {
-            try { scanner.resume(); } catch { /* ignore */ }
-          }, 2000);
-        },
-        (error) => {
-          // ignore continuous scanning misses
-        }
-      );
+        scanner.render(
+          async (decodedText) => {
+            scanner.pause(true);
+            const result = await checkInParticipant(decodedText);
+            setLastScannedResult({ ...result, timestamp: new Date() });
+            setTimeout(() => {
+              try { scanner.resume(); } catch { /* ignore */ }
+            }, 2000);
+          },
+          (error) => {
+            if (typeof error === 'string' && error.includes('Requested device not found')) {
+              setCameraError('No webcam hardware detected on this device. You can upload a QR image or use rapid manual search below.');
+            }
+          }
+        );
 
-      scannerRef.current = scanner;
+        scannerRef.current = scanner;
+      } catch (err) {
+        setCameraError('Camera access not supported in this browser window. Use manual barcode search or file upload.');
+      }
 
       return () => {
         if (scannerRef.current) {
-          scannerRef.current.clear().catch(console.error);
+          try {
+            scannerRef.current.clear().catch(console.error);
+          } catch {
+            // ignore
+          }
         }
       };
     }
   }, [isScanning, checkInParticipant]);
+
+  // Scan QR code from an uploaded image file
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const html5QrCode = new Html5Qrcode('file-scanner-hidden');
+      const decodedText = await html5QrCode.scanFile(file, true);
+      const result = await checkInParticipant(decodedText);
+      setLastScannedResult({ ...result, timestamp: new Date() });
+    } catch (err) {
+      setLastScannedResult({
+        success: false,
+        message: 'Could not read a valid QR code from the uploaded image.',
+        timestamp: new Date()
+      });
+    }
+  };
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,6 +118,9 @@ export const QRScannerDesk: React.FC = () => {
   return (
     <div className="space-y-6">
       
+      {/* Hidden div for file scanning */}
+      <div id="file-scanner-hidden" className="hidden" />
+
       {/* Top Quick Stats Banner */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 flex items-center gap-3.5">
@@ -145,21 +180,45 @@ export const QRScannerDesk: React.FC = () => {
                 </div>
               </div>
 
-              <button
-                onClick={() => setIsScanning(!isScanning)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                  isScanning 
-                    ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/40' 
-                    : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30'
-                }`}
-              >
-                {isScanning ? 'Stop Camera' : 'Start Camera Scanner'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors flex items-center gap-1.5"
+                >
+                  <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                  Scan Image File
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+
+                <button
+                  onClick={() => setIsScanning(!isScanning)}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    isScanning 
+                      ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/40' 
+                      : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30'
+                  }`}
+                >
+                  {isScanning ? 'Stop Camera' : 'Start Camera Scanner'}
+                </button>
+              </div>
             </div>
 
             {/* Camera View Area */}
             {isScanning ? (
               <div className="relative rounded-2xl overflow-hidden border-2 border-indigo-500/40 bg-slate-950 p-2">
+                {cameraError && (
+                  <div className="p-3 mb-2 rounded-xl bg-amber-950/60 border border-amber-500/40 text-amber-300 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{cameraError}</span>
+                  </div>
+                )}
                 <div id="qr-reader" className="w-full text-slate-100" />
                 <div className="text-center text-[11px] text-slate-400 py-1">
                   Point attendee QR pass at camera for instant automatic verification.
@@ -169,9 +228,9 @@ export const QRScannerDesk: React.FC = () => {
               <div className="p-8 rounded-2xl bg-slate-950/60 border border-dashed border-slate-800 text-center space-y-3">
                 <QrCode className="w-12 h-12 text-slate-600 mx-auto" />
                 <div>
-                  <h4 className="text-xs font-bold text-slate-300">Camera Scanner Inactive</h4>
+                  <h4 className="text-xs font-bold text-slate-300">Camera Scanner Ready</h4>
                   <p className="text-[11px] text-slate-500 max-w-sm mx-auto mt-1">
-                    Click "Start Camera Scanner" above to use your webcam, or use the fast manual search box below.
+                    Click "Start Camera Scanner" to scan via webcam, or upload an image badge, or use the fast manual search below.
                   </p>
                 </div>
               </div>
@@ -202,14 +261,14 @@ export const QRScannerDesk: React.FC = () => {
 
           </div>
 
-          {/* Quick 1-Click Simulation Buttons for Judges/Demoing */}
+          {/* Quick 1-Click Simulation Buttons */}
           <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                1-Click Quick Scan Demo (For Instant Presentation)
+                1-Click Quick Check-in Test (Simulate Physical Gate Entry)
               </span>
-              <span className="text-[10px] text-slate-500">Simulate physical badge scan</span>
+              <span className="text-[10px] text-slate-500">Instant test</span>
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -238,7 +297,7 @@ export const QRScannerDesk: React.FC = () => {
 
         {/* Right Column: Live Scan Result & Attendee Card */}
         <div className="lg:col-span-5 space-y-4">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Latest Check-in Verification</h4>
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Latest Gate Verification</h4>
 
           {lastScannedResult ? (
             <div className={`p-5 rounded-3xl border-2 transition-all space-y-4 ${

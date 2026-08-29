@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Participant } from '../../types';
-import { ShieldCheck, Clock, Download, Share2, Sparkles, CheckCircle2, User, Mail, Tag } from 'lucide-react';
+import type { Participant } from '../../types';
+import { Download, Share2, Sparkles, CheckCircle2, User, Tag, Clock } from 'lucide-react';
 import { useEvent } from '../../context/EventContext';
 
 interface DigitalBadgeProps {
@@ -22,16 +22,16 @@ export const DigitalBadge: React.FC<DigitalBadgeProps> = ({ participant }) => {
   };
 
   return (
-    <div className="flex flex-col items-center">
+    <div className="printable-pass-container flex flex-col items-center">
       
-      {/* 3D-like Glowing Digital Pass Card */}
+      {/* 3D Glowing Digital Pass Card */}
       <div 
         ref={badgeRef}
-        className="relative w-full max-w-sm rounded-3xl p-6 bg-gradient-to-b from-slate-900 via-slate-950 to-indigo-950/80 border-2 border-indigo-500/40 shadow-2xl shadow-indigo-950/60 overflow-hidden transform transition-all duration-300 hover:scale-[1.01]"
+        className="printable-pass-card relative w-full max-w-sm rounded-3xl p-6 bg-gradient-to-b from-slate-900 via-slate-950 to-indigo-950/80 border-2 border-indigo-500/40 shadow-2xl shadow-indigo-950/60 overflow-hidden transform transition-all duration-300"
       >
         {/* Decorative Top Accent Glow */}
-        <div className="absolute -top-24 -right-24 w-48 h-48 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="no-print absolute -top-24 -right-24 w-48 h-48 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="no-print absolute -bottom-24 -left-24 w-48 h-48 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none" />
 
         {/* Top Pass Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
@@ -41,7 +41,7 @@ export const DigitalBadge: React.FC<DigitalBadgeProps> = ({ participant }) => {
             </div>
             <div>
               <span className="text-[11px] font-bold tracking-wider uppercase text-indigo-400">Official Pass</span>
-              <h3 className="text-xs font-bold text-white truncate max-w-[180px]">{event?.title || 'Global Hackathon 2026'}</h3>
+              <h3 className="text-xs font-bold text-white truncate max-w-[180px]">{event?.title || 'Global Innovation Summit'}</h3>
             </div>
           </div>
           
@@ -77,7 +77,7 @@ export const DigitalBadge: React.FC<DigitalBadgeProps> = ({ participant }) => {
             title="Click to copy Ticket ID"
           >
             <span>{participant.qr_ticket_id}</span>
-            <Share2 className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-400" />
+            <Share2 className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-400 no-print" />
           </button>
         </div>
 
@@ -107,7 +107,7 @@ export const DigitalBadge: React.FC<DigitalBadgeProps> = ({ participant }) => {
             <div className="pt-2">
               <span className="text-slate-400 text-[11px] block mb-1.5 flex items-center gap-1">
                 <Tag className="w-3 h-3 text-indigo-400" />
-                Skills & Tech
+                Skills / Expertise
               </span>
               <div className="flex flex-wrap gap-1.5">
                 {participant.skills.slice(0, 4).map((skill, idx) => (
@@ -137,13 +137,13 @@ export const DigitalBadge: React.FC<DigitalBadgeProps> = ({ participant }) => {
       </div>
 
       {/* Quick Action Buttons */}
-      <div className="flex items-center gap-3 mt-4">
+      <div className="no-print flex items-center gap-3 mt-4">
         <button
           onClick={handlePrint}
           className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 transition-colors"
         >
           <Download className="w-4 h-4 text-indigo-400" />
-          Print / Save Pass
+          Print / Save Pass (PDF)
         </button>
         <button
           onClick={handleCopyTicket}

@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { EventProvider, useEvent } from './context/EventContext';
 import { Navbar } from './components/common/Navbar';
 import { ToastContainer } from './components/common/ToastContainer';
-import { SystemArchitectureModal } from './components/common/SystemArchitectureModal';
-import { JudgeGuideModal } from './components/common/JudgeGuideModal';
+import { CreateEventModal } from './components/common/CreateEventModal';
+import { AuthModal } from './components/common/AuthModal';
 import { ParticipantHub } from './components/participant/ParticipantHub';
 import { OrganizerDashboard } from './components/organizer/OrganizerDashboard';
 import { JudgePortal } from './components/judge/JudgePortal';
@@ -11,9 +11,9 @@ import { LiveLeaderboard } from './components/leaderboard/LiveLeaderboard';
 import { Zap } from 'lucide-react';
 
 const MainDashboard: React.FC = () => {
-  const { role, loading, announcements } = useEvent();
-  const [showArchModal, setShowArchModal] = useState(false);
-  const [showGuideModal, setShowGuideModal] = useState(false);
+  const { role, loading, announcements, event } = useEvent();
+  const [showCreateEventModal, setShowCreateEventModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   // Latest pinned urgent announcement
   const pinnedUrgent = announcements.find(a => a.is_pinned || a.category === 'urgent');
@@ -23,13 +23,13 @@ const MainDashboard: React.FC = () => {
       
       {/* Top Navigation */}
       <Navbar 
-        onOpenArchitecture={() => setShowArchModal(true)} 
-        onOpenJudgeGuide={() => setShowGuideModal(true)} 
+        onOpenCreateEvent={() => setShowCreateEventModal(true)} 
+        onOpenAuth={() => setShowAuthModal(true)} 
       />
 
       {/* Pinned Urgent Alert Ribbon */}
       {pinnedUrgent && (
-        <div className="bg-gradient-to-r from-rose-950 via-slate-900 to-rose-950 border-b border-rose-500/40 px-4 py-2 text-xs">
+        <div className="bg-gradient-to-r from-rose-950 via-slate-900 to-rose-950 border-b border-rose-500/40 px-4 py-2 text-xs no-print">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-rose-300 font-semibold truncate">
               <span className="flex h-2 w-2 relative">
@@ -50,7 +50,7 @@ const MainDashboard: React.FC = () => {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         
         {loading ? (
-          <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4">
+          <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4 no-print">
             <div className="w-12 h-12 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center animate-spin">
               <Zap className="w-6 h-6 text-indigo-400" />
             </div>
@@ -72,25 +72,18 @@ const MainDashboard: React.FC = () => {
 
       {/* Global Modals & Toasts */}
       <ToastContainer />
-      <SystemArchitectureModal isOpen={showArchModal} onClose={() => setShowArchModal(false)} />
-      <JudgeGuideModal isOpen={showGuideModal} onClose={() => setShowGuideModal(false)} />
+      <CreateEventModal isOpen={showCreateEventModal} onClose={() => setShowCreateEventModal(false)} />
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
 
       {/* Footer */}
-      <footer className="mt-auto border-t border-slate-900 bg-slate-950/80 py-6 text-xs text-slate-500">
+      <footer className="mt-auto border-t border-slate-900 bg-slate-950/80 py-6 text-xs text-slate-500 no-print">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="font-bold text-slate-400">EventPulse 360</span>
-            <span>• Built for Prompt War Hackathon 2026</span>
+            <span>• Managing "{event?.title || 'Global Tech Summit'}"</span>
           </div>
 
           <div className="flex items-center gap-4 text-[11px]">
-            <button onClick={() => setShowArchModal(true)} className="hover:text-indigo-400 transition-colors">
-              System Architecture
-            </button>
-            <button onClick={() => setShowGuideModal(true)} className="hover:text-cyan-400 transition-colors">
-              Judge Q&A Sheet
-            </button>
-            <span className="text-slate-600">|</span>
             <span className="flex items-center gap-1 text-slate-400">
               Powered by <span className="text-emerald-400 font-semibold">Supabase PostgreSQL</span>
             </span>

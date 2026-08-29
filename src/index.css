@@ -58,3 +58,50 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #334155;
 }
+
+/* =========================================================
+   PERFECT PRINT STYLING FOR EVENT DIGITAL PASS
+   When user clicks Print/Save Pass as PDF, only print the badge!
+   ========================================================= */
+@media print {
+  /* Hide all website navigation, headers, ribbons, footers, buttons */
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  header, footer, nav, button, .no-print, [role="banner"], [role="alert"] {
+    display: none !important;
+  }
+
+  /* Show only the printable pass card */
+  .printable-pass-container {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    min-height: 100vh !important;
+    padding: 20px !important;
+    background: transparent !important;
+  }
+
+  .printable-pass-card {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border: 2px solid #0f172a !important;
+    box-shadow: none !important;
+    max-width: 380px !important;
+    width: 100% !important;
+    page-break-inside: avoid !important;
+  }
+
+  .printable-pass-card * {
+    color: #0f172a !important;
+    text-shadow: none !important;
+  }
+
+  .printable-pass-card svg {
+    filter: none !important;
+  }
+}
