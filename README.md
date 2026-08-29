@@ -91,8 +91,8 @@
 
 ```bash
 # 1. Clone repository
-git clone <your-repo-url>
-cd "prompt war"
+git clone https://github.com/MstSadikShaikh/EventPulse-360.git
+cd EventPulse-360
 
 # 2. Install dependencies
 npm install
